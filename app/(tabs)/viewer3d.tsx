@@ -105,15 +105,35 @@ const threeJsHTML = `
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'UPDATE_SCENE') {
-          updateScene(data.segments);
+          updateScene(data.segments, data.labelPosition);
         }
       } catch (e) {
         console.error("WebView msg parse error:", e);
       }
     });
 
+    function createTextSprite(text) {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = 256;
+      canvas.height = 128;
+      context.font = "Bold 40px Arial";
+      context.fillStyle = "rgba(255, 255, 255, 1.0)";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      context.lineWidth = 5;
+      context.strokeText(text, 128, 64);
+      context.fillText(text, 128, 64);
+      const texture = new THREE.CanvasTexture(canvas);
+      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+      const sprite = new THREE.Sprite(spriteMaterial);
+      sprite.scale.set(60, 30, 1);
+      return sprite;
+    }
+
     // Build cylinder meshes from segment data
-    function updateScene(segmentsData) {
+    function updateScene(segmentsData, labelPosition) {
       try {
         if (drillholeGroup) {
           scene.remove(drillholeGroup);
@@ -167,6 +187,22 @@ const threeJsHTML = `
             
             drillholeGroup.add(mesh);
           });
+          
+        if (labelPosition && labelPosition !== 'none' && hole.label && hole.label.topPos && hole.label.bottomPos) {
+            const sprite = createTextSprite(hole.label.text);
+            const posData = labelPosition === 'top' ? hole.label.topPos : hole.label.bottomPos;
+            const pos = new THREE.Vector3(posData.x, posData.z, -posData.y);
+            
+            // Offset text slightly so it doesn't overlap with the cylinder
+            if (labelPosition === 'top') {
+                pos.y += 15;
+            } else {
+                pos.y -= 15;
+            }
+            
+            sprite.position.copy(pos);
+            drillholeGroup.add(sprite);
+        }
         });
 
         scene.add(drillholeGroup);
@@ -191,6 +227,7 @@ export default function Viewer3DScreen() {
   const { datasets } = useData();
 
   const [colorMode, setColorMode] = useState<'default' | 'lithology' | 'grade'>('default');
+  const [labelPosition, setLabelPosition] = useState<'none' | 'top' | 'bottom'>('top');
   const [selectedGradeColumn, setSelectedGradeColumn] = useState<string | null>(null);
   const [webviewReady, setWebviewReady] = useState(false);
   const webviewRef = useRef<WebView>(null);
@@ -288,7 +325,15 @@ export default function Viewer3DScreen() {
         radius: seg.radius
       }));
 
-      return { holeId, segments: safeSegments };
+      return {
+        holeId,
+        segments: safeSegments,
+        label: {
+          text: holeId,
+          topPos: safeSegments.length > 0 ? safeSegments[0].start : null,
+          bottomPos: safeSegments.length > 0 ? safeSegments[safeSegments.length - 1].end : null
+        }
+      };
     }).filter(h => h.segments.length > 0);
   }, [collarData, surveyData, lithologyData, assayData, center, colorMode, selectedGradeColumn, gradeRange, verticalExaggeration, lithColorMap, customMin, customMax, gradeSteps, hiddenLiths]);
 
@@ -299,13 +344,14 @@ export default function Viewer3DScreen() {
       const script = `
         window.postMessage(JSON.stringify({
           type: 'UPDATE_SCENE',
-          segments: ${JSON.stringify(drillholeSegments)}
+          segments: ${JSON.stringify(drillholeSegments)},
+          labelPosition: '${labelPosition}'
         }), '*');
         true;
       `;
       webviewRef.current.injectJavaScript(script);
     }
-  }, [webviewReady, drillholeSegments]);
+  }, [webviewReady, drillholeSegments, labelPosition]);
 
   const hasData = collarData.length > 0;
 
@@ -348,6 +394,23 @@ export default function Viewer3DScreen() {
                 </Text>
               </TouchableOpacity>
             );
+          })}
+        </View>
+
+        <View style={[styles.controlsRow, { paddingTop: 0, gap: 6 }]}>
+          <Text style={{ fontSize: 11, color: colors.textSecondary, alignSelf: 'center', marginRight: 4, fontWeight: '600' }}>İSİMLER:</Text>
+          {(['none', 'top', 'bottom'] as const).map(pos => {
+            const active = labelPosition === pos;
+            const label = pos === 'none' ? 'Gizli' : pos === 'top' ? 'Kuyu Başı' : 'Kuyu Sonu';
+            return (
+              <TouchableOpacity
+                key={pos}
+                onPress={() => setLabelPosition(pos)}
+                style={[styles.modeBtn, { paddingVertical: 5, paddingHorizontal: 12, borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primary + '20' : 'transparent' }]}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '600', color: active ? colors.primary : colors.textSecondary }}>{label}</Text>
+              </TouchableOpacity>
+            )
           })}
         </View>
 
