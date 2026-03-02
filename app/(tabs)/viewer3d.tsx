@@ -141,9 +141,10 @@ const threeJsHTML = `
         requestAnimationFrame(animate);
         if (controls) controls.update();
 
-        // 1. ViewCube'ün dönüşünü ana kameraya bağla (Ters senkronizasyon)
-        if (cameraHUD && viewCube) {
-          cameraHUD.quaternion.copy(camera.quaternion);
+        // 1. HUD Kamerayı ana kameranın baktığı yönün tersine dinamik yerleştir
+        if (cameraHUD && controls) {
+          cameraHUD.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(4.5);
+          cameraHUD.lookAt(0, 0, 0);
         }
 
         // 2. Ana sahneyi tam ekrana çiz
@@ -151,9 +152,10 @@ const threeJsHTML = `
         renderer.clear();
         renderer.render(scene, camera);
 
-        // 3. ViewCube sahnesini ekranın sağ üst köşesine çiz (HUD)
-        const hudSize = 100; // Küpün piksel boyutu
-        const margin = 20;   // Köşeden boşluk
+        // 3. KRİTİK: Depth (Derinlik) buffer'ı temizle ki küp ana sahnenin arkasında kalmasın
+        renderer.clearDepth(); 
+        const hudSize = 100;
+        const margin = 20;
         renderer.setViewport(window.innerWidth - hudSize - margin, window.innerHeight - hudSize - margin, hudSize, hudSize);
         renderer.render(sceneHUD, cameraHUD);
       }
@@ -294,16 +296,21 @@ const threeJsHTML = `
 
         scene.add(drillholeGroup);
 
-        // 1. Tüm 3D hacmin gerçek sınırlarını ve merkezini hesapla
+        // 1. Tüm 3D hacmin gerçek sınırlarını, merkezini ve ÇAPINI (size) hesapla
         const box = new THREE.Box3().setFromObject(drillholeGroup);
         const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3()).length() || 100;
 
-        // 2. Kameranın görünmez hedefini yeraltı kütlesinin tam merkezine taşı
-        // Bu sayede her açıdan (ön, arka, alt, üst) eşit miktarda zoom yapılabilir
+        // 2. Kameranın görünmez hedefini tam merkeze al
         controls.target.copy(center);
         
-        // 3. Kameranın yakını kesme mesafesini küçült (kayaların içine girebilmek için)
-        camera.near = 0.01;
+        // 3. KRİTİK: Kamerayı da hedefin boyutlarına göre uygun bir mesafeye taşı!
+        // Yoksa kamera (300,300,300) noktasında kalır ve zoom sistemi kilitlenir.
+        camera.position.set(center.x + size * 0.6, center.y + size * 0.5, center.z + size * 0.6);
+        
+        // 4. Kesme mesafelerini modelin büyüklüğüne göre dinamik ayarla
+        camera.near = size / 10000;
+        camera.far = size * 100;
         camera.updateProjectionMatrix();
 
         controls.update();
