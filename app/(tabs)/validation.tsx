@@ -9,6 +9,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -63,20 +64,30 @@ export default function ValidationScreen() {
   }, [runValidation]);
 
   const handleExport = async () => {
-    if (!filteredIssues || filteredIssues.length === 0) return;
+    try {
+      if (!filteredIssues || filteredIssues.length === 0) {
+        Alert.alert("Uyarı", "Dışa aktarılacak hata/uyarı kaydı bulunamadı.");
+        return;
+      }
 
-    const exportData = filteredIssues.map((issue: QAQCIssue) => ({
-      Code: issue.code,
-      Tablo: issue.table,
-      HoleID: issue.holeId,
-      Satir: issue.rowIndex !== undefined ? issue.rowIndex + 1 : '-',
-      Seviye: issue.severity,
-      Mesaj: issue.message,
-      Kanit: JSON.stringify(issue.evidence).replace(/"/g, '""')
-    }));
+      const exportData = filteredIssues.map((issue: QAQCIssue) => ({
+        Code: issue.code,
+        Tablo: issue.table,
+        HoleID: issue.holeId || '-',
+        Satir: issue.rowIndex !== undefined ? issue.rowIndex + 1 : '-',
+        Seviye: issue.severity,
+        Mesaj: issue.message,
+        // ÇÖZÜM BURADA: evidence varsa çevir, yoksa '-' yaz
+        Kanit: issue.evidence ? JSON.stringify(issue.evidence).replace(/"/g, '""') : '-'
+      }));
 
-    const csv = convertToCSV(exportData);
-    await exportCSV(`QAQC_Raporu_${new Date().getTime()}.csv`, csv);
+      const csv = convertToCSV(exportData);
+      await exportCSV(`JeoValid_QAQC_Raporu_${new Date().getTime()}.csv`, csv);
+
+    } catch (error) {
+      console.error("Dışa aktarma hatası:", error);
+      Alert.alert("Hata", "Dosya dışa aktarılırken bir sorun oluştu.");
+    }
   };
 
   const getSeverityColor = useCallback((severity: QAQCSeverity) => {
