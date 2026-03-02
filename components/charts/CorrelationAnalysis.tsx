@@ -109,45 +109,84 @@ export const CorrelationHeatmap = ({
     const { colors } = useTheme();
     const screenWidth = Dimensions.get('window').width;
     const chartWidth = screenWidth - 48;
-    const cellSize = Math.min((chartWidth - 60) / elements.length, 40);
-    const chartHeight = cellSize * elements.length + 60;
+
+    // Kenar boşluklarını artırıyoruz
+    const leftMargin = 85;
+    const topMargin = 85;
+
+    // Hücre boyutunu yeni boşluklara göre hesaplıyoruz
+    const cellSize = Math.min((chartWidth - leftMargin - 10) / elements.length, 35);
+    const chartHeight = topMargin + (cellSize * elements.length) + 20;
+
+    // Uzun metinleri kısaltan yardımcı fonksiyon
+    const formatLabel = (txt: string) => txt.length > 12 ? txt.substring(0, 10) + '..' : txt;
 
     return (
         <View style={styles.heatmapContainer}>
             <Svg width={chartWidth} height={chartHeight}>
-                {elements.map((el, i) => (
-                    <G key={i}>
-                        <SvgText x={45} y={40 + i * cellSize + cellSize / 2 + 3} fontSize={9} fill={colors.textSecondary} textAnchor="end">{el}</SvgText>
-                        <SvgText x={50 + i * cellSize + cellSize / 2} y={35} fontSize={9} fill={colors.textSecondary} textAnchor="middle">{el}</SvgText>
-                        {elements.map((_, j) => {
-                            const r = matrix[i][j];
-                            const absR = Math.abs(r);
-                            const color = r > 0 ? `rgba(59, 130, 246, ${absR})` : `rgba(239, 68, 68, ${absR})`;
-                            return (
-                                <G key={j}>
-                                    <Rect
-                                        x={50 + j * cellSize}
-                                        y={40 + i * cellSize}
-                                        width={cellSize - 1}
-                                        height={cellSize - 1}
-                                        fill={color}
-                                    />
-                                    {cellSize > 20 && (
-                                        <SvgText
-                                            x={50 + j * cellSize + cellSize / 2}
-                                            y={40 + i * cellSize + cellSize / 2 + 3}
-                                            fontSize={8}
-                                            fill={absR > 0.6 ? "#FFF" : colors.text}
-                                            textAnchor="middle"
-                                        >
-                                            {r.toFixed(1)}
-                                        </SvgText>
-                                    )}
-                                </G>
-                            );
-                        })}
-                    </G>
-                ))}
+                <G>
+                    {/* 1. Sütun İsimleri (Yukarıda, Çapraz Eğik) */}
+                    {elements.map((el, i) => {
+                        const xPos = leftMargin + i * cellSize + cellSize / 2;
+                        const yPos = topMargin - 10;
+                        return (
+                            <SvgText
+                                key={`col-${i}`}
+                                x={xPos}
+                                y={yPos}
+                                fontSize={9}
+                                fill={colors.textSecondary}
+                                textAnchor="start"
+                                transform={`rotate(-45, ${xPos}, ${yPos})`}
+                            >
+                                {formatLabel(el)}
+                            </SvgText>
+                        );
+                    })}
+
+                    {/* 2. Satır İsimleri ve Matrix Hücreleri */}
+                    {elements.map((el, i) => (
+                        <G key={`row-${i}`}>
+                            <SvgText
+                                x={leftMargin - 10}
+                                y={topMargin + i * cellSize + cellSize / 2 + 3}
+                                fontSize={9}
+                                fill={colors.textSecondary}
+                                textAnchor="end"
+                            >
+                                {formatLabel(el)}
+                            </SvgText>
+
+                            {elements.map((_, j) => {
+                                const r = matrix[i][j];
+                                const absR = Math.abs(r);
+                                const color = r > 0 ? `rgba(59, 130, 246, ${absR})` : `rgba(239, 68, 68, ${absR})`;
+                                return (
+                                    <G key={`cell-${j}`}>
+                                        <Rect
+                                            x={leftMargin + j * cellSize}
+                                            y={topMargin + i * cellSize}
+                                            width={cellSize - 1}
+                                            height={cellSize - 1}
+                                            fill={color}
+                                        />
+                                        {cellSize > 20 && (
+                                            <SvgText
+                                                x={leftMargin + j * cellSize + cellSize / 2}
+                                                y={topMargin + i * cellSize + cellSize / 2 + 3}
+                                                fontSize={8}
+                                                fill={absR > 0.6 ? "#FFF" : colors.text}
+                                                textAnchor="middle"
+                                            >
+                                                {r.toFixed(1)}
+                                            </SvgText>
+                                        )}
+                                    </G>
+                                );
+                            })}
+                        </G>
+                    ))}
+                </G>
             </Svg>
         </View>
     );
