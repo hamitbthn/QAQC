@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert } from 'react-native';
+import { Alert, Modal, FlatList } from 'react-native';
 import {
   BarChart3,
   ScatterChart,
@@ -191,40 +191,57 @@ export default function ChartsScreen() {
       case 'Drillhole':
         return (
           <>
-            <View style={[styles.sectionHeader, { zIndex: 10 }]}>
+            <View style={styles.sectionHeader}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Downhole Grade vs Depth</Text>
-              <View style={{ position: 'relative' }}>
-                <TouchableOpacity onPress={() => setShowHolePicker(!showHolePicker)} style={styles.holeSelector}>
-                  <Text style={{ color: colors.primary }}>{selectedHoleId || holeIds[0] || 'Hole Seçin'}</Text>
-                  <ChevronDown size={14} color={colors.primary} />
-                </TouchableOpacity>
-
-                {showHolePicker && (
-                  <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <ScrollView style={{ maxHeight: 350 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true}>
-                      {holeIds.map(hId => (
-                        <TouchableOpacity
-                          key={hId}
-                          style={[styles.dropdownItem, selectedHoleId === hId && { backgroundColor: colors.primary + '15' }]}
-                          onPress={() => {
-                            setSelectedHoleId(hId);
-                            setShowHolePicker(false);
-                          }}
-                        >
-                          <Text style={{
-                            color: selectedHoleId === hId ? colors.primary : colors.text,
-                            fontSize: 13,
-                            fontWeight: selectedHoleId === hId ? '700' : '500'
-                          }}>
-                            {hId}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
+              <TouchableOpacity onPress={() => setShowHolePicker(true)} style={styles.holeSelector}>
+                <Text style={{ color: colors.primary, fontWeight: '600' }}>{selectedHoleId || holeIds[0] || 'Hole Seçin'}</Text>
+                <ChevronDown size={14} color={colors.primary} />
+              </TouchableOpacity>
             </View>
+
+            {/* YENİ MODAL BAZLI KUYU SEÇİCİ */}
+            <Modal
+              visible={showHolePicker}
+              transparent={true}
+              animationType="slide"
+              onRequestClose={() => setShowHolePicker(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+                  <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                    <Text style={[styles.modalTitle, { color: colors.text }]}>Kuyu Seçin</Text>
+                    <TouchableOpacity onPress={() => setShowHolePicker(false)} style={styles.modalCloseBtn}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <FlatList
+                    data={holeIds}
+                    keyExtractor={(item) => item}
+                    renderItem={({ item: hId }) => (
+                      <TouchableOpacity
+                        style={[styles.modalItem, selectedHoleId === hId && { backgroundColor: colors.primary + '15' }]}
+                        onPress={() => {
+                          setSelectedHoleId(hId);
+                          setShowHolePicker(false);
+                        }}
+                      >
+                        <Text style={{
+                          color: selectedHoleId === hId ? colors.primary : colors.text,
+                          fontSize: 16,
+                          fontWeight: selectedHoleId === hId ? '700' : '500'
+                        }}>
+                          {hId}
+                        </Text>
+                        {selectedHoleId === hId && <Text style={{ color: colors.primary, fontSize: 18 }}>✓</Text>}
+                      </TouchableOpacity>
+                    )}
+                    contentContainerStyle={{ paddingBottom: 30 }}
+                    showsVerticalScrollIndicator={true}
+                  />
+                </View>
+              </View>
+            </Modal>
 
             <View style={styles.chartWrapper}>
               <DownholeGradePlot
@@ -369,6 +386,39 @@ const styles = StyleSheet.create({
   chartWrapper: { marginBottom: 30, padding: 15, backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 16 },
   chartSub: { fontSize: 12, fontWeight: '600', marginBottom: 10 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 400 },
-  dropdown: { position: 'absolute', top: '100%', right: 0, width: 140, borderWidth: 1, borderRadius: 8, marginTop: 4, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, zIndex: 50 },
-  dropdownItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '70%', // Ekranda kaplayacağı alan
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalCloseBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+  },
 });
