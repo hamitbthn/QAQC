@@ -49,6 +49,9 @@ const threeJsHTML = `
   <script>
     let scene, camera, renderer, drillholeGroup, controls;
     let sceneHUD, cameraHUD, viewCube;
+    let initialCameraPos = new THREE.Vector3();
+    let initialTargetPos = new THREE.Vector3();
+    let isResetting = false;
 
     function init() {
       // Scene
@@ -72,33 +75,52 @@ const threeJsHTML = `
       cameraHUD = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
       cameraHUD.position.z = 4.5;
 
-      // Küp yüzeyleri için dinamik Canvas texture oluşturucu
-      function createTextMaterial(text, bgColor) {
+      // Premium Canvas Material Generator
+      function createTextMaterial(text, bg1, bg2, textColor) {
         const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
+        canvas.width = 256;
+        canvas.height = 256;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = bgColor || '#f8fafc'; // Arka plan
-        ctx.fillRect(0, 0, 128, 128);
-        ctx.strokeStyle = '#cbd5e1'; // Kenarlık
-        ctx.lineWidth = 10;
-        ctx.strokeRect(0, 0, 128, 128);
-        ctx.fillStyle = '#334155'; // Yazı rengi
-        ctx.font = 'bold 36px Arial';
+        
+        // Premium Gradient Arka Plan
+        const grad = ctx.createLinearGradient(0, 0, 0, 256);
+        grad.addColorStop(0, bg1 || '#334155');
+        grad.addColorStop(1, bg2 || '#0f172a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 256);
+
+        // Glassmorphism / İç Işıltı Kenarlığı
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.lineWidth = 12;
+        ctx.strokeRect(6, 6, 244, 244);
+
+        // Premium Metin Stili
+        ctx.fillStyle = textColor || '#ffffff';
+        ctx.font = 'bold 56px "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(text, 64, 64);
-        return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas) });
+        
+        // 3D Derinlik Veren Metin Gölgesi
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        
+        ctx.fillText(text, 128, 128);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        return new THREE.MeshBasicMaterial({ map: texture });
       }
 
-      // Yüzey materyalleri (Sağ, Sol, Üst, Alt, Ön, Arka)
+      // Premium Yüzey Renkleri
       const cubeMaterials = [
-        createTextMaterial('SAĞ'),
-        createTextMaterial('SOL'),
-        createTextMaterial('ÜST', '#bae6fd'), // Üst her zaman Gökyüzü mavisini andırsın
-        createTextMaterial('ALT', '#fef08a'), // Alt her zaman Toprak/Sarı tonu
-        createTextMaterial('ÖN'),
-        createTextMaterial('ARKA')
+        createTextMaterial('SAĞ', '#334155', '#0f172a'),
+        createTextMaterial('SOL', '#334155', '#0f172a'),
+        createTextMaterial('ÜST', '#0284c7', '#0369a1'), // Premium Gök Mavisi
+        createTextMaterial('ALT', '#b45309', '#78350f'), // Premium Toprak/Kızıl
+        createTextMaterial('ÖN', '#334155', '#0f172a'),
+        createTextMaterial('ARKA', '#334155', '#0f172a')
       ];
 
       viewCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), cubeMaterials);
@@ -139,7 +161,18 @@ const threeJsHTML = `
       // Render Loop
       function animate() {
         requestAnimationFrame(animate);
-        if (controls) controls.update();
+        
+        // Sinematik Kamera Sıfırlama Animasyonu
+        if (isResetting && controls) {
+          camera.position.lerp(initialCameraPos, 0.08);
+          controls.target.lerp(initialTargetPos, 0.08);
+          controls.update();
+          if (camera.position.distanceTo(initialCameraPos) < 1) {
+             isResetting = false; // Hedefe ulaştı, dur.
+          }
+        } else if (controls) {
+          controls.update();
+        }
 
         // 1. HUD Kamerayı ana kameranın baktığı yönün tersine dinamik yerleştir
         if (cameraHUD && controls) {
@@ -183,6 +216,27 @@ const threeJsHTML = `
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: null }));
         }
       });
+
+      // ViewCube Tıklama (Home) Butonu
+      window.addEventListener('pointerdown', (event) => {
+        const clientX = event.clientX !== undefined ? event.clientX : (event.touches ? event.touches[0].clientX : 0);
+        const clientY = event.clientY !== undefined ? event.clientY : (event.touches ? event.touches[0].clientY : 0);
+
+        const hudSize = 120;
+        const margin = 20;
+        const hudLeft = window.innerWidth - hudSize - margin;
+        const hudRight = window.innerWidth - margin;
+        const hudTop = margin;
+        const hudBottom = margin + hudSize;
+
+        // Eğer parmak/mouse tam olarak sağ üstteki küpe dokunduysa
+        if (clientX >= hudLeft && clientX <= hudRight && clientY >= hudTop && clientY <= hudBottom) {
+          isResetting = true;
+          event.stopImmediatePropagation(); // Alttaki modeli döndürmesini engelle
+        } else {
+          isResetting = false; // Boşluğa veya modele dokunursa animasyonu kes
+        }
+      }, true);
 
       // Signal React Native we are ready
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'READY' }));
@@ -301,14 +355,13 @@ const threeJsHTML = `
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3()).length() || 100;
 
-        // 2. Kameranın görünmez hedefini tam merkeze al
-        controls.target.copy(center);
+        // Başlangıç lokasyonlarını hafızaya al
+        initialTargetPos.copy(center);
+        initialCameraPos.set(center.x + size * 0.8, center.y + size * 0.5, center.z + size * 0.8);
+
+        controls.target.copy(initialTargetPos);
+        camera.position.copy(initialCameraPos);
         
-        // 3. KRİTİK: Kamerayı da hedefin boyutlarına göre uygun bir mesafeye taşı!
-        // Yoksa kamera (300,300,300) noktasında kalır ve zoom sistemi kilitlenir.
-        camera.position.set(center.x + size * 0.6, center.y + size * 0.5, center.z + size * 0.6);
-        
-        // 4. Kesme mesafelerini modelin büyüklüğüne göre dinamik ayarla
         camera.near = size / 10000;
         camera.far = size * 100;
         camera.updateProjectionMatrix();
