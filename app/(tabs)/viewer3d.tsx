@@ -96,6 +96,24 @@ const threeJsHTML = `
         renderer.render(scene, camera);
       });
 
+      // Raycaster Setup for Interactions
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      window.addEventListener('click', (event) => {
+        if (!drillholeGroup) return;
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        
+        const intersects = raycaster.intersectObjects(drillholeGroup.children);
+        if (intersects.length > 0) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: intersects[0].object.userData }));
+        } else {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: null }));
+        }
+      });
+
       // Signal React Native we are ready
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'READY' }));
     }
@@ -185,6 +203,7 @@ const threeJsHTML = `
             mesh.position.copy(pos);
             mesh.quaternion.copy(quat);
             
+            mesh.userData = seg; // Bind the react native data to the 3D object
             drillholeGroup.add(mesh);
           });
           
@@ -229,6 +248,7 @@ export default function Viewer3DScreen() {
   const [colorMode, setColorMode] = useState<'default' | 'lithology' | 'grade'>('default');
   const [labelPosition, setLabelPosition] = useState<'none' | 'top' | 'bottom'>('top');
   const [selectedGradeColumn, setSelectedGradeColumn] = useState<string | null>(null);
+  const [selectedSegment, setSelectedSegment] = useState<any>(null);
   const [webviewReady, setWebviewReady] = useState(false);
   const webviewRef = useRef<WebView>(null);
 
@@ -322,7 +342,12 @@ export default function Viewer3DScreen() {
         start: { x: seg.start.x, y: seg.start.y, z: seg.start.z },
         end: { x: seg.end.x, y: seg.end.y, z: seg.end.z },
         color: seg.color,
-        radius: seg.radius
+        radius: (seg as any).radius,
+        // TOOLTIP VERİLERİ:
+        holeId: holeId,
+        from: seg.from,
+        to: seg.to,
+        value: seg.gradeValue !== undefined ? seg.gradeValue : seg.lithCode
       }));
 
       return {
@@ -482,6 +507,8 @@ export default function Viewer3DScreen() {
                 const data = JSON.parse(event.nativeEvent.data);
                 if (data.type === 'READY') {
                   setWebviewReady(true);
+                } else if (data.type === 'SEGMENT_CLICKED') {
+                  setSelectedSegment(data.data);
                 }
               }}
               showsVerticalScrollIndicator={false}
@@ -490,6 +517,31 @@ export default function Viewer3DScreen() {
               bounces={false}
             />
           </>
+        )}
+
+        {/* INTERACTIVE TOOLTIP PANEL */}
+        {selectedSegment && (
+          <View style={{
+            position: 'absolute', top: 20, right: 20, backgroundColor: colors.surface,
+            padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+            shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 5, elevation: 8,
+            minWidth: 160
+          }}>
+            <Text style={{ color: colors.primary, fontSize: 16, fontWeight: 'bold', marginBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 4 }}>
+              {selectedSegment.holeId}
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginBottom: 4 }}>
+              <Text style={{ fontWeight: 'bold', color: colors.text }}>Aralık:</Text> {selectedSegment.from}m - {selectedSegment.to}m
+            </Text>
+            {selectedSegment.value !== undefined && (
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                <Text style={{ fontWeight: 'bold', color: colors.text }}>Değer:</Text> {typeof selectedSegment.value === 'number' ? selectedSegment.value.toFixed(2) : selectedSegment.value}
+              </Text>
+            )}
+            <TouchableOpacity onPress={() => setSelectedSegment(null)} style={{ position: 'absolute', top: 10, right: 10 }}>
+              <Text style={{ color: colors.textTertiary, fontSize: 16 }}>✕</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* LITHOLOGY LEGEND OVERLAY */}
