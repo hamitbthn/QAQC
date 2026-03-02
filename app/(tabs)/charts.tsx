@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert } from 'react-native';
 import {
   BarChart3,
   ScatterChart,
@@ -37,6 +38,7 @@ import {
   type BDLHandling
 } from '@/utils/chartDataProcessing';
 import { discoverGradeColumns } from '@/utils/assayDiscovery';
+import { convertToCSV, exportCSV } from '@/utils/exportUtils';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -91,6 +93,37 @@ export default function ChartsScreen() {
     getGroupedData(assayData, currentElement, 'HOLEID', { bdlHandling, excludeOutliers }),
     [assayData, currentElement, bdlHandling, excludeOutliers]
   );
+
+  const handleExport = async () => {
+    try {
+      if (!assayData || assayData.length === 0) {
+        Alert.alert("Uyarı", "Dışa aktarılacak veri bulunamadı.");
+        return;
+      }
+
+      let dataToExport = assayData;
+      let fileName = `JeoValid_${category}_Data.csv`;
+
+      // If Drillhole is selected, export only the selected hole's data
+      if (category === 'Drillhole') {
+        const currentHole = selectedHoleId || holeIds[0];
+        dataToExport = assayData.filter((d: any) => String(d.HOLEID) === currentHole);
+        fileName = `JeoValid_Downhole_${currentHole}.csv`;
+      } else {
+        // For other charts, export the selected elements
+        dataToExport = assayData.map((row: any) => {
+          const newRow: any = { HOLEID: row.HOLEID, FROM: row.FROM, TO: row.TO };
+          selectedElements.forEach(el => newRow[el] = row[el]);
+          return newRow as AssayRow;
+        });
+      }
+
+      const csv = convertToCSV(dataToExport);
+      await exportCSV(fileName, csv);
+    } catch (error) {
+      Alert.alert("Hata", "Dışa aktarma işlemi başarısız oldu.");
+    }
+  };
 
   const renderControls = () => (
     <View style={[styles.controls, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
@@ -158,12 +191,39 @@ export default function ChartsScreen() {
       case 'Drillhole':
         return (
           <>
-            <View style={styles.sectionHeader}>
+            <View style={[styles.sectionHeader, { zIndex: 10 }]}>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Downhole Grade vs Depth</Text>
-              <TouchableOpacity onPress={() => setShowHolePicker(!showHolePicker)} style={styles.holeSelector}>
-                <Text style={{ color: colors.primary }}>{selectedHoleId || 'Hole Seçin'}</Text>
-                <ChevronDown size={14} color={colors.primary} />
-              </TouchableOpacity>
+              <View style={{ position: 'relative' }}>
+                <TouchableOpacity onPress={() => setShowHolePicker(!showHolePicker)} style={styles.holeSelector}>
+                  <Text style={{ color: colors.primary }}>{selectedHoleId || holeIds[0] || 'Hole Seçin'}</Text>
+                  <ChevronDown size={14} color={colors.primary} />
+                </TouchableOpacity>
+
+                {showHolePicker && (
+                  <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+                      {holeIds.map(hId => (
+                        <TouchableOpacity
+                          key={hId}
+                          style={[styles.dropdownItem, selectedHoleId === hId && { backgroundColor: colors.primary + '15' }]}
+                          onPress={() => {
+                            setSelectedHoleId(hId);
+                            setShowHolePicker(false);
+                          }}
+                        >
+                          <Text style={{
+                            color: selectedHoleId === hId ? colors.primary : colors.text,
+                            fontSize: 13,
+                            fontWeight: selectedHoleId === hId ? '700' : '500'
+                          }}>
+                            {hId}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.chartWrapper}>
@@ -244,7 +304,7 @@ export default function ChartsScreen() {
             <Text style={[styles.headerTitle, { color: colors.text }]}>Exploration Charts</Text>
             <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Professional Analysis Suite</Text>
           </View>
-          <TouchableOpacity style={styles.exportBtn}>
+          <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
             <Download size={20} color={colors.primary} />
           </TouchableOpacity>
         </View>
@@ -309,4 +369,6 @@ const styles = StyleSheet.create({
   chartWrapper: { marginBottom: 30, padding: 15, backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 16 },
   chartSub: { fontSize: 12, fontWeight: '600', marginBottom: 10 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 400 },
+  dropdown: { position: 'absolute', top: '100%', right: 0, width: 140, borderWidth: 1, borderRadius: 8, marginTop: 4, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, zIndex: 50 },
+  dropdownItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
 });
