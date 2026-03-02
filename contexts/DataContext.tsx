@@ -97,11 +97,29 @@ export const [DataProvider, useData] = createContextHook(() => {
     newMappingReports: Record<DatasetType, MappingReportData | null>
   ) => {
     try {
+      // Devasa hata dizilerini telefon hafızasına yazmamak için sanitize et
+      const sanitizedDatasets: any = {};
       for (const [key, data] of Object.entries(newDatasets)) {
-        await saveDatasetLocally(key, data || null);
+        if (data) {
+          sanitizedDatasets[key] = {
+            ...data,
+            validationReport: data.validationReport ? {
+              ...data.validationReport,
+              errors: [], // Sadece hafızaya yazarken temizle, RAM'de kalacak
+              warnings: [],
+              info: []
+            } : undefined
+          };
+        } else {
+          sanitizedDatasets[key] = null;
+        }
+      }
+
+      for (const [key, data] of Object.entries(sanitizedDatasets)) {
+        await saveDatasetLocally(key as DatasetType, data as any);
       }
       for (const [key, data] of Object.entries(newMappingReports)) {
-        await saveDatasetLocally(`REPORT_${key}`, data || null);
+        await saveDatasetLocally(`REPORT_${key}` as DatasetType, data as any);
       }
       console.log('Data saved to local file system successfully.');
       setStorageWarning(false);

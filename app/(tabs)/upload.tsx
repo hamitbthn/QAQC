@@ -259,9 +259,10 @@ export default function UploadScreen() {
         showError({
           severity: validationReport.errors.length > 0 ? 'ERROR' : 'WARN',
           title: 'Doğrulama Tamamlandı',
-          message: `${fileName} yüklendi ancak bazı sorunlar tespit edildi.`,
+          message: `${fileName} yüklendi ancak ${totalIssues} sorun tespit edildi. Lütfen detaylı analiz için QA/QC sekmesine gidin.`,
           validationData: {
-            issues: [...validationReport.errors, ...validationReport.warnings] as any,
+            // KRİTİK ÇÖZÜM: UI çökmesini engellemek için sadece ilk 50 hatayı önizlemeye gönder
+            issues: [...validationReport.errors, ...validationReport.warnings].slice(0, 50) as any,
             totalCount: totalIssues
           }
         });
