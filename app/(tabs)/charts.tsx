@@ -201,7 +201,7 @@ export default function ChartsScreen() {
 
                 {showHolePicker && (
                   <View style={[styles.dropdown, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled>
+                    <ScrollView style={{ maxHeight: 350 }} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={true}>
                       {holeIds.map(hId => (
                         <TouchableOpacity
                           key={hId}
@@ -331,7 +331,7 @@ export default function ChartsScreen() {
 
       {renderControls()}
 
-      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
         {renderCategoryContent()}
       </ScrollView>
     </View>
