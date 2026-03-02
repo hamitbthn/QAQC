@@ -68,6 +68,8 @@ const threeJsHTML = `
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
+      controls.enablePan = true;
+      controls.enableZoom = true;
 
       // Lights
       const ambient = new THREE.AmbientLight(0xffffff, 0.7);
@@ -100,10 +102,15 @@ const threeJsHTML = `
       const raycaster = new THREE.Raycaster();
       const mouse = new THREE.Vector2();
 
-      window.addEventListener('click', (event) => {
+      window.addEventListener('pointerdown', (event) => {
         if (!drillholeGroup) return;
-        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        // Mobil dokunma (touch) ve fare (mouse) koordinatlarını güvenli bir şekilde al
+        const clientX = event.clientX !== undefined ? event.clientX : (event.touches ? event.touches[0].clientX : 0);
+        const clientY = event.clientY !== undefined ? event.clientY : (event.touches ? event.touches[0].clientY : 0);
+
+        mouse.x = (clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
         
         const intersects = raycaster.intersectObjects(drillholeGroup.children);
