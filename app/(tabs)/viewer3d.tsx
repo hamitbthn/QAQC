@@ -48,7 +48,7 @@ const threeJsHTML = `
 <body>
   <script>
     let scene, camera, renderer, drillholeGroup, controls;
-    let sceneHUD, cameraHUD, viewCube;
+    let compassGroup;
     let initialCameraPos = new THREE.Vector3();
     let initialTargetPos = new THREE.Vector3();
     let isResetting = false;
@@ -68,66 +68,46 @@ const threeJsHTML = `
       renderer.setPixelRatio(window.devicePixelRatio);
       document.body.appendChild(renderer.domElement);
 
-      renderer.autoClear = false; // ÇOK ÖNEMLİ: İki sahneyi üst üste çizebilmek için
+      renderer.autoClear = true; // İkinci sahneyi iptal et, tek render ile kasmayı bitir
 
-      // --- VIEWCUBE (HUD) KURULUMU ---
-      sceneHUD = new THREE.Scene();
-      cameraHUD = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-      cameraHUD.position.z = 4.5;
+      // --- SIFIR KASMA YAPAN 3D EKSEN PUSULASI ---
+      compassGroup = new THREE.Group();
+      scene.add(camera); // Kamerayı sahneye ekle
+      camera.add(compassGroup); // Pusulayı kameranın önüne yapıştır
 
-      // Premium Canvas Material Generator
-      function createTextMaterial(text, bg1, bg2, textColor) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
-        
-        // Premium Gradient Arka Plan
-        const grad = ctx.createLinearGradient(0, 0, 0, 256);
-        grad.addColorStop(0, bg1 || '#334155');
-        grad.addColorStop(1, bg2 || '#0f172a');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 256, 256);
+      // İnce ve performanslı yön okları
+      const aLen = 1.2, hLen = 0.4, hWid = 0.3;
+      compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), aLen, 0xf87171, hLen, hWid)); // Doğu (Kırmızı)
+      compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), aLen, 0x4ade80, hLen, hWid)); // Üst (Yeşil)
+      compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), aLen, 0x60a5fa, hLen, hWid)); // Kuzey (Mavi)
 
-        // Glassmorphism / İç Işıltı Kenarlığı
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 12;
-        ctx.strokeRect(6, 6, 244, 244);
-
-        // Premium Metin Stili
-        ctx.fillStyle = textColor || '#ffffff';
-        ctx.font = 'bold 56px "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        
-        // 3D Derinlik Veren Metin Gölgesi
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 3;
-        ctx.shadowOffsetY = 3;
-        
-        ctx.fillText(text, 128, 128);
-        
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        return new THREE.MeshBasicMaterial({ map: texture });
+      // Okların uçları için minik etiketler (Tek seferlik canvas, sıfır kasma)
+      function createTinyLabel(text, color) {
+        const cvs = document.createElement('canvas');
+        cvs.width = 64; cvs.height = 64;
+        const ctx = cvs.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, 32, 32);
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs), depthTest: false }));
+        sp.scale.set(0.5, 0.5, 1);
+        return sp;
       }
+      
+      const lX = createTinyLabel('D', '#f87171'); lX.position.set(1.5, 0, 0);
+      const lY = createTinyLabel('Ü', '#4ade80'); lY.position.set(0, 1.5, 0);
+      const lZ = createTinyLabel('K', '#60a5fa'); lZ.position.set(0, 0, 1.5);
+      compassGroup.add(lX, lY, lZ);
 
-      // Premium Yüzey Renkleri
-      const cubeMaterials = [
-        createTextMaterial('SAĞ', '#334155', '#0f172a'),
-        createTextMaterial('SOL', '#334155', '#0f172a'),
-        createTextMaterial('ÜST', '#0284c7', '#0369a1'), // Premium Gök Mavisi
-        createTextMaterial('ALT', '#b45309', '#78350f'), // Premium Toprak/Kızıl
-        createTextMaterial('ÖN', '#334155', '#0f172a'),
-        createTextMaterial('ARKA', '#334155', '#0f172a')
-      ];
-
-      viewCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), cubeMaterials);
-      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2));
-      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x475569, linewidth: 2 }));
-      viewCube.add(line);
-      sceneHUD.add(viewCube);
+      // Pusulayı ekranın sağ üst köşesine dinamik olarak sabitle
+      function updateCompassPos() {
+        const dist = 6;
+        const height = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * dist;
+        compassGroup.position.set((height * camera.aspect) / 2 - 1.0, height / 2 - 1.0, -dist);
+      }
+      updateCompassPos();
+      window.addEventListener('resize', updateCompassPos);
       // --------------------------------
 
       // Controls
@@ -174,23 +154,13 @@ const threeJsHTML = `
           controls.update();
         }
 
-        // 1. HUD Kamerayı ana kameranın baktığı yönün tersine dinamik yerleştir
-        if (cameraHUD && controls) {
-          cameraHUD.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(4.5);
-          cameraHUD.lookAt(0, 0, 0);
+        // MÜKEMMEL MATEMATİK: Pusulayı dünya ekseninde sabit tutmak için kameranın dönüşünün "tersini" uygula.
+        if (compassGroup) {
+          compassGroup.quaternion.copy(camera.quaternion).invert();
         }
 
-        // 2. Ana sahneyi tam ekrana çiz
-        renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
-        renderer.clear();
+        // TEK RENDER PASS = SIFIR KASMA
         renderer.render(scene, camera);
-
-        // 3. KRİTİK: Depth (Derinlik) buffer'ı temizle ki küp ana sahnenin arkasında kalmasın
-        renderer.clearDepth(); 
-        const hudSize = 100;
-        const margin = 20;
-        renderer.setViewport(window.innerWidth - hudSize - margin, window.innerHeight - hudSize - margin, hudSize, hudSize);
-        renderer.render(sceneHUD, cameraHUD);
       }
       animate();
 
