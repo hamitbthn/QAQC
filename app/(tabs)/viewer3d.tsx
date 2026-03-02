@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Box, Palette, Activity } from 'lucide-react-native';
@@ -114,60 +114,65 @@ const threeJsHTML = `
 
     // Build cylinder meshes from segment data
     function updateScene(segmentsData) {
-      if (drillholeGroup) {
-        scene.remove(drillholeGroup);
-        drillholeGroup.children.forEach(mesh => {
-          mesh.geometry.dispose();
-          mesh.material.dispose();
+      try {
+        if (drillholeGroup) {
+          scene.remove(drillholeGroup);
+          drillholeGroup.children.forEach(mesh => {
+            if (mesh.geometry) mesh.geometry.dispose();
+            if (mesh.material) mesh.material.dispose();
+          });
+        }
+
+        drillholeGroup = new THREE.Group();
+
+        const geomCache = new Map();
+        const matCache = new Map();
+
+        // For each drillhole
+        segmentsData.forEach(hole => {
+          hole.segments.forEach(seg => {
+            const thickness = seg.radius || 1.2;
+            
+            // Z is up in Three.js sometimes, but here we keep (X, Z, -Y) mapping
+            const startV = new THREE.Vector3(seg.start.x, seg.start.z, -seg.start.y);
+            const endV = new THREE.Vector3(seg.end.x, seg.end.z, -seg.end.y);
+            
+            const direction = new THREE.Vector3().subVectors(endV, startV);
+            const len = direction.length() || 0.01;
+            const pos = new THREE.Vector3().addVectors(startV, endV).multiplyScalar(0.5);
+            
+            const quat = new THREE.Quaternion().setFromUnitVectors(
+              new THREE.Vector3(0, 1, 0),
+              direction.clone().normalize()
+            );
+
+            // Reuse geometry by length and thickness
+            const geomKey = len.toFixed(2) + '_' + thickness.toString();
+            let geo = geomCache.get(geomKey);
+            if (!geo) {
+              geo = new THREE.CylinderGeometry(thickness, thickness, len, 6);
+              geomCache.set(geomKey, geo);
+            }
+
+            // Reuse material by color
+            let mat = matCache.get(seg.color);
+            if (!mat) {
+              mat = new THREE.MeshStandardMaterial({ color: seg.color, roughness: 0.6, metalness: 0.15 });
+              matCache.set(seg.color, mat);
+            }
+
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            mesh.quaternion.copy(quat);
+            
+            drillholeGroup.add(mesh);
+          });
         });
+
+        scene.add(drillholeGroup);
+      } catch (err) {
+        console.error("ThreeJS render error:", err);
       }
-
-      drillholeGroup = new THREE.Group();
-
-      const thickness = 1.2;
-      const geomCache = new Map();
-      const matCache = new Map();
-
-      // For each drillhole
-      segmentsData.forEach(hole => {
-        hole.segments.forEach(seg => {
-          // Z is up in Three.js sometimes, but here we keep (X, Z, -Y) mapping
-          const startV = new THREE.Vector3(seg.start.x, seg.start.z, -seg.start.y);
-          const endV = new THREE.Vector3(seg.end.x, seg.end.z, -seg.end.y);
-          
-          const direction = new THREE.Vector3().subVectors(endV, startV);
-          const len = direction.length() || 0.01;
-          const pos = new THREE.Vector3().addVectors(startV, endV).multiplyScalar(0.5);
-          
-          const quat = new THREE.Quaternion().setFromUnitVectors(
-            new THREE.Vector3(0, 1, 0),
-            direction.clone().normalize()
-          );
-
-          // Reuse geometry by length rounded
-          const lenKey = len.toFixed(2);
-          let geo = geomCache.get(lenKey);
-          if (!geo) {
-            geo = new THREE.CylinderGeometry(thickness, thickness, len, 6);
-            geomCache.set(lenKey, geo);
-          }
-
-          // Reuse material by color
-          let mat = matCache.get(seg.color);
-          if (!mat) {
-            mat = new THREE.MeshStandardMaterial({ color: seg.color, roughness: 0.6, metalness: 0.15 });
-            matCache.set(seg.color, mat);
-          }
-
-          const mesh = new THREE.Mesh(geo, mat);
-          mesh.position.copy(pos);
-          mesh.quaternion.copy(quat);
-          
-          drillholeGroup.add(mesh);
-        });
-      });
-
-      scene.add(drillholeGroup);
     }
 
     init();
@@ -193,6 +198,11 @@ export default function Viewer3DScreen() {
   // Lithology States
   const [customLithColors, setCustomLithColors] = useState<Record<string, string>>({});
   const [editingLithCode, setEditingLithCode] = useState<string | null>(null);
+
+  const [customMin, setCustomMin] = useState('');
+  const [customMax, setCustomMax] = useState('');
+  const [gradeSteps, setGradeSteps] = useState('');
+  const [hiddenLiths, setHiddenLiths] = useState<Set<string>>(new Set());
 
   const verticalExaggeration = 1.0;
 
@@ -240,6 +250,12 @@ export default function Viewer3DScreen() {
       sv.sort((a, b) => Number(a.DEPTH) - Number(b.DEPTH))
     );
 
+    // Evaluate Custom States
+    const activeMin = customMin ? Number(customMin) : gradeRange.min;
+    const activeMax = customMax ? Number(customMax) : gradeRange.max;
+    const activeSteps = gradeSteps ? Number(gradeSteps) : 0;
+    const hiddenLithsArray = Array.from(hiddenLiths);
+
     return (collarData as CollarRow[]).map((collar) => {
       const holeId = String(collar.HOLEID);
       const sv = surveyMap[holeId] || [];
@@ -254,10 +270,11 @@ export default function Viewer3DScreen() {
         segments = createColoredSegmentsFromLithology(
           trajectoryResult.trajectory, lithologyData as LithologyRow[], holeId, verticalExaggeration, lithColorMap
         );
+        segments = segments.filter(seg => !hiddenLiths.has(seg.lithCode || ''));
       } else if (colorMode === 'grade' && assayData.length > 0 && selectedGradeColumn) {
         segments = createColoredSegmentsFromGrade(
           trajectoryResult.trajectory, assayData as AssayRow[], holeId,
-          selectedGradeColumn, gradeRange.min, gradeRange.max, verticalExaggeration
+          selectedGradeColumn, activeMin, activeMax, verticalExaggeration, activeSteps
         );
       } else {
         segments = createTrajectorySegments(trajectoryResult.trajectory, verticalExaggeration, '#3B82F6');
@@ -267,12 +284,13 @@ export default function Viewer3DScreen() {
       const safeSegments = segments.map(seg => ({
         start: { x: seg.start.x, y: seg.start.y, z: seg.start.z },
         end: { x: seg.end.x, y: seg.end.y, z: seg.end.z },
-        color: seg.color
+        color: seg.color,
+        radius: seg.radius
       }));
 
       return { holeId, segments: safeSegments };
     }).filter(h => h.segments.length > 0);
-  }, [collarData, surveyData, lithologyData, assayData, center, colorMode, selectedGradeColumn, gradeRange, verticalExaggeration, lithColorMap]);
+  }, [collarData, surveyData, lithologyData, assayData, center, colorMode, selectedGradeColumn, gradeRange, verticalExaggeration, lithColorMap, customMin, customMax, gradeSteps, hiddenLiths]);
 
   // ─── Post segments to WebView ───
   useEffect(() => {
@@ -444,14 +462,47 @@ export default function Viewer3DScreen() {
         {colorMode === 'grade' && selectedGradeColumn && (
           <View style={[styles.legendOverlay, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.legendTitle, { color: colors.text }]}>Isı Haritası: {selectedGradeColumn}</Text>
-            <View style={styles.gradeBar}>
-              <View style={[styles.gradeSegment, { backgroundColor: 'rgb(0,178,100)' }]} />
-              <View style={[styles.gradeSegment, { backgroundColor: 'rgb(128,89,50)' }]} />
-              <View style={[styles.gradeSegment, { backgroundColor: 'rgb(255,0,0)' }]} />
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Min ({gradeRange.min.toFixed(2)})</Text>
+                <TextInput
+                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
+                  placeholder={gradeRange.min.toFixed(2)}
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                  value={customMin}
+                  onChangeText={setCustomMin}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Maks ({gradeRange.max.toFixed(2)})</Text>
+                <TextInput
+                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
+                  placeholder={gradeRange.max.toFixed(2)}
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                  value={customMax}
+                  onChangeText={setCustomMax}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Adım</Text>
+                <TextInput
+                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
+                  placeholder="0 (Oto)"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                  value={gradeSteps}
+                  onChangeText={setGradeSteps}
+                />
+              </View>
             </View>
-            <View style={styles.gradeLabels}>
-              <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{gradeRange.min.toFixed(2)}</Text>
-              <Text style={{ color: colors.textSecondary, fontSize: 10 }}>{gradeRange.max.toFixed(2)}</Text>
+
+            <View style={styles.gradeBar}>
+              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(240, 100%, 50%)' }]} />
+              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(120, 100%, 50%)' }]} />
+              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(0, 100%, 50%)' }]} />
             </View>
           </View>
         )}
@@ -513,6 +564,7 @@ const styles = StyleSheet.create({
   colorSwatch: { width: 28, height: 28, borderRadius: 14 },
   gradeBar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', marginVertical: 8 },
   gradeSegment: { flex: 1 },
-  gradeLabels: { flexDirection: 'row', justifyContent: 'space-between' }
+  gradeLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  inputField: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 12 }
 });
 

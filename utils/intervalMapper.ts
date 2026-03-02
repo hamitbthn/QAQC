@@ -33,6 +33,7 @@ export interface ColoredSegment {
   to: number;
   lithCode?: string;
   gradeValue?: number;
+  radius?: number;
 }
 
 const LITH_COLOR_PALETTE: Record<string, string> = {
@@ -117,19 +118,21 @@ export function buildLithColorMap(
 export function getGradeColor(
   value: number,
   minValue: number,
-  maxValue: number
+  maxValue: number,
+  steps?: number
 ): string {
-  if (isNaN(value) || minValue === maxValue) {
-    return '#94A3B8';
+  if (isNaN(value) || minValue >= maxValue) return '#94A3B8';
+
+  let normalized = Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
+
+  // Aralık sayısı (Steps) mantığı: Değeri belirlenen basamaklara yuvarlar
+  if (steps && steps > 1) {
+    normalized = Math.round(normalized * (steps - 1)) / (steps - 1);
   }
 
-  const normalized = Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
-
-  const r = Math.round(255 * normalized);
-  const g = Math.round(255 * (1 - normalized) * 0.7);
-  const b = Math.round(100 * (1 - normalized));
-
-  return `rgb(${r},${g},${b})`;
+  // Mavi (240) -> Kırmızı (0) geçişi
+  const hue = (1 - normalized) * 240;
+  return `hsl(${hue}, 100%, 50%)`;
 }
 
 export function mapIntervalsToTrajectory(
@@ -259,26 +262,33 @@ export function createColoredSegmentsFromGrade(
   gradeColumn: string,
   minGrade: number,
   maxGrade: number,
-  verticalExaggeration: number = 1
+  verticalExaggeration: number = 1,
+  steps: number = 0
 ): ColoredSegment[] {
   const intervals = mapAssayIntervalsToTrajectory(trajectory, assayData, holeId, gradeColumn);
 
-  return intervals.map(interval => ({
-    start: {
-      x: interval.startPoint.x_local,
-      y: interval.startPoint.y_local,
-      z: interval.startPoint.z_local * verticalExaggeration,
-    },
-    end: {
-      x: interval.endPoint.x_local,
-      y: interval.endPoint.y_local,
-      z: interval.endPoint.z_local * verticalExaggeration,
-    },
-    color: getGradeColor(interval.gradeValue ?? 0, minGrade, maxGrade),
-    from: interval.from,
-    to: interval.to,
-    gradeValue: interval.gradeValue,
-  }));
+  return intervals.map(interval => {
+    const value = interval.gradeValue ?? 0;
+    const normalized = Math.max(0, Math.min(1, (value - minGrade) / (maxGrade - minGrade)));
+    
+    return {
+      start: {
+        x: interval.startPoint.x_local,
+        y: interval.startPoint.y_local,
+        z: interval.startPoint.z_local * verticalExaggeration,
+      },
+      end: {
+        x: interval.endPoint.x_local,
+        y: interval.endPoint.y_local,
+        z: interval.endPoint.z_local * verticalExaggeration,
+      },
+      color: getGradeColor(value, minGrade, maxGrade, steps),
+      radius: Number((1.2 * (1 + (normalized * 1.5))).toFixed(3)) || 1.2, // Yüksek tenör = Kalın boru
+      from: interval.from,
+      to: interval.to,
+      gradeValue: value,
+    };
+  });
 }
 
 export function createTrajectorySegments(
