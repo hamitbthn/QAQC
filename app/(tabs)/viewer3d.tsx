@@ -75,13 +75,13 @@ const threeJsHTML = `
       scene.add(camera); // Kamerayı sahneye ekle
       camera.add(compassGroup); // Pusulayı kameranın önüne yapıştır
 
-      // İnce ve performanslı yön okları
-      const aLen = 1.2, hLen = 0.4, hWid = 0.3;
+      // İnce ve ufaltılmış yön okları (Boyutlar yarıdan fazla küçültüldü)
+      const aLen = 0.4, hLen = 0.15, hWid = 0.1;
       compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), aLen, 0xf87171, hLen, hWid)); // Doğu (Kırmızı)
       compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), aLen, 0x4ade80, hLen, hWid)); // Üst (Yeşil)
       compassGroup.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), aLen, 0x60a5fa, hLen, hWid)); // Kuzey (Mavi)
 
-      // Okların uçları için minik etiketler (Tek seferlik canvas, sıfır kasma)
+      // Okların uçları için minik etiketler
       function createTinyLabel(text, color) {
         const cvs = document.createElement('canvas');
         cvs.width = 64; cvs.height = 64;
@@ -91,20 +91,20 @@ const threeJsHTML = `
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(text, 32, 32);
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs), depthTest: false }));
-        sp.scale.set(0.5, 0.5, 1);
+        sp.scale.set(0.2, 0.2, 1); // Harfler çok daha küçük
         return sp;
       }
       
-      const lX = createTinyLabel('D', '#f87171'); lX.position.set(1.5, 0, 0);
-      const lY = createTinyLabel('Ü', '#4ade80'); lY.position.set(0, 1.5, 0);
-      const lZ = createTinyLabel('K', '#60a5fa'); lZ.position.set(0, 0, 1.5);
+      const lX = createTinyLabel('D', '#f87171'); lX.position.set(0.55, 0, 0);
+      const lY = createTinyLabel('Ü', '#4ade80'); lY.position.set(0, 0.55, 0);
+      const lZ = createTinyLabel('K', '#60a5fa'); lZ.position.set(0, 0, 0.55);
       compassGroup.add(lX, lY, lZ);
 
-      // Pusulayı ekranın sağ üst köşesine dinamik olarak sabitle
+      // Pusulayı ekranın sağ üst köşesine dinamik olarak sabitle (Köşeye daha yakın)
       function updateCompassPos() {
         const dist = 6;
         const height = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * dist;
-        compassGroup.position.set((height * camera.aspect) / 2 - 1.0, height / 2 - 1.0, -dist);
+        compassGroup.position.set((height * camera.aspect) / 2 - 0.5, height / 2 - 0.5, -dist);
       }
       updateCompassPos();
       window.addEventListener('resize', updateCompassPos);
