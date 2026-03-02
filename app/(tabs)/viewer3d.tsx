@@ -47,7 +47,8 @@ const threeJsHTML = `
 </head>
 <body>
   <script>
-    let scene, camera, renderer, controls, drillholeGroup;
+    let scene, camera, renderer, drillholeGroup, controls;
+    let sceneHUD, cameraHUD, viewCube;
 
     function init() {
       // Scene
@@ -63,6 +64,49 @@ const threeJsHTML = `
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
       document.body.appendChild(renderer.domElement);
+
+      renderer.autoClear = false; // ÇOK ÖNEMLİ: İki sahneyi üst üste çizebilmek için
+
+      // --- VIEWCUBE (HUD) KURULUMU ---
+      sceneHUD = new THREE.Scene();
+      cameraHUD = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+      cameraHUD.position.z = 4.5;
+
+      // Küp yüzeyleri için dinamik Canvas texture oluşturucu
+      function createTextMaterial(text, bgColor) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = bgColor || '#f8fafc'; // Arka plan
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.strokeStyle = '#cbd5e1'; // Kenarlık
+        ctx.lineWidth = 10;
+        ctx.strokeRect(0, 0, 128, 128);
+        ctx.fillStyle = '#334155'; // Yazı rengi
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 64, 64);
+        return new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas) });
+      }
+
+      // Yüzey materyalleri (Sağ, Sol, Üst, Alt, Ön, Arka)
+      const cubeMaterials = [
+        createTextMaterial('SAĞ'),
+        createTextMaterial('SOL'),
+        createTextMaterial('ÜST', '#bae6fd'), // Üst her zaman Gökyüzü mavisini andırsın
+        createTextMaterial('ALT', '#fef08a'), // Alt her zaman Toprak/Sarı tonu
+        createTextMaterial('ÖN'),
+        createTextMaterial('ARKA')
+      ];
+
+      viewCube = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 2), cubeMaterials);
+      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(2, 2, 2));
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x475569, linewidth: 2 }));
+      viewCube.add(line);
+      sceneHUD.add(viewCube);
+      // --------------------------------
 
       // Controls
       controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -93,10 +137,27 @@ const threeJsHTML = `
       });
 
       // Render Loop
-      renderer.setAnimationLoop(() => {
-        controls.update();
+      function animate() {
+        requestAnimationFrame(animate);
+        if (controls) controls.update();
+
+        // 1. ViewCube'ün dönüşünü ana kameraya bağla (Ters senkronizasyon)
+        if (cameraHUD && viewCube) {
+          cameraHUD.quaternion.copy(camera.quaternion);
+        }
+
+        // 2. Ana sahneyi tam ekrana çiz
+        renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+        renderer.clear();
         renderer.render(scene, camera);
-      });
+
+        // 3. ViewCube sahnesini ekranın sağ üst köşesine çiz (HUD)
+        const hudSize = 100; // Küpün piksel boyutu
+        const margin = 20;   // Köşeden boşluk
+        renderer.setViewport(window.innerWidth - hudSize - margin, window.innerHeight - hudSize - margin, hudSize, hudSize);
+        renderer.render(sceneHUD, cameraHUD);
+      }
+      animate();
 
       // Raycaster Setup for Interactions
       const raycaster = new THREE.Raycaster();
