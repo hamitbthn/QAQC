@@ -50,7 +50,6 @@ export default function UploadScreen() {
   const { showError } = useError();
 
   const [selectedType, setSelectedType] = useState<DatasetType>('COLLAR');
-  const [showTypePicker, setShowTypePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [parsedData, setParsedData] = useState<{
     headers: string[];
@@ -350,50 +349,60 @@ export default function UploadScreen() {
         )}
 
         <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>
-          VERİ SETİ TİPİ
+          VERİ SETİ TİPİ SEÇİN
         </Text>
 
-        <TouchableOpacity
-          style={[styles.typePicker, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => setShowTypePicker(!showTypePicker)}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 16 }}
+          contentContainerStyle={{ gap: 8 }}
         >
-          <View style={styles.typePickerContent}>
-            {datasetTypes.find(t => t.type === selectedType)?.icon}
-            <Text style={[styles.typePickerText, { color: colors.text }]}>
-              {selectedType}
-            </Text>
-          </View>
-          <ChevronDown size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
+          {datasetTypes.map(({ type, label, icon }) => {
+            const isSelected = type === selectedType;
+            const isUploaded = !!datasets[type];
 
-        {showTypePicker && (
-          <View style={[styles.typeOptions, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            {datasetTypes.map(({ type, label, icon }) => (
+            return (
               <TouchableOpacity
                 key={type}
                 style={[
-                  styles.typeOption,
-                  type === selectedType && { backgroundColor: colors.primary + '15' },
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    gap: 8,
+                    backgroundColor: isSelected ? colors.primary + '15' : colors.surface,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }
                 ]}
                 onPress={() => {
                   setSelectedType(type);
-                  setShowTypePicker(false);
                   setParsedData(null);
                   setShowMappingUI(false);
                 }}
               >
                 {icon}
                 <Text style={[
-                  styles.typeOptionText,
-                  { color: type === selectedType ? colors.primary : colors.text }
+                  {
+                    fontSize: 14,
+                    fontWeight: isSelected ? '700' : '500',
+                    color: isSelected ? colors.primary : colors.text
+                  }
                 ]}>
                   {label}
                 </Text>
-                {type === selectedType && <Check size={18} color={colors.primary} />}
+                {isUploaded && (
+                  <View style={{ backgroundColor: colors.success, borderRadius: 10, padding: 2, marginLeft: 4 }}>
+                    <Check size={12} color="#FFF" />
+                  </View>
+                )}
               </TouchableOpacity>
-            ))}
-          </View>
-        )}
+            );
+          })}
+        </ScrollView>
 
         {existingDataset && (
           <View style={[styles.existingData, { backgroundColor: colors.successLight }]}>
@@ -658,41 +667,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 8,
   },
-  typePicker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  typePickerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  typePickerText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  typeOptions: {
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: 'hidden',
-  },
-  typeOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    gap: 12,
-  },
-  typeOptionText: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500' as const,
-  },
+
   existingData: {
     flexDirection: 'row',
     alignItems: 'center',
