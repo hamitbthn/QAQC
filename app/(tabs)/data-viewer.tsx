@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { useError } from '@/contexts/ErrorContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -213,14 +214,20 @@ export default function DataViewerScreen() {
               </View>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={true}>
-              {data.map((row: any, rowIndex: number) => {
+            <FlatList
+              data={data}
+              keyExtractor={(_, index) => String(index)}
+              initialNumToRender={15}
+              maxToRenderPerBatch={20}
+              windowSize={5}
+              removeClippedSubviews={true}
+              showsVerticalScrollIndicator={true}
+              renderItem={({ item: row, index: rowIndex }) => {
                 const hasError = errorMap?.has(rowIndex);
                 const errorMessages = errorMap?.get(rowIndex) || [];
 
                 return (
                   <View
-                    key={rowIndex}
                     style={[
                       styles.tableRow,
                       { backgroundColor: hasError ? colors.errorLight : colors.surface },
@@ -268,8 +275,8 @@ export default function DataViewerScreen() {
                     )}
                   </View>
                 );
-              })}
-            </ScrollView>
+              }}
+            />
           </View>
         </ScrollView>
       </View>
