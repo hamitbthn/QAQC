@@ -131,7 +131,7 @@ const threeJsHTML = `
         // For each drillhole
         segmentsData.forEach(hole => {
           hole.segments.forEach(seg => {
-            const thickness = seg.radius || 1.2;
+            const thickness = (seg.radius && !isNaN(seg.radius)) ? seg.radius : 1.2;
             
             // Z is up in Three.js sometimes, but here we keep (X, Z, -Y) mapping
             const startV = new THREE.Vector3(seg.start.x, seg.start.z, -seg.start.y);
@@ -251,9 +251,9 @@ export default function Viewer3DScreen() {
     );
 
     // Evaluate Custom States
-    const activeMin = customMin ? Number(customMin) : gradeRange.min;
-    const activeMax = customMax ? Number(customMax) : gradeRange.max;
-    const activeSteps = gradeSteps ? Number(gradeSteps) : 0;
+    const activeMin = customMin !== '' && !isNaN(Number(customMin)) ? Number(customMin) : gradeRange.min;
+    const activeMax = customMax !== '' && !isNaN(Number(customMax)) ? Number(customMax) : gradeRange.max;
+    const activeSteps = gradeSteps !== '' && !isNaN(Number(gradeSteps)) ? Number(gradeSteps) : 0;
     const hiddenLithsArray = Array.from(hiddenLiths);
 
     return (collarData as CollarRow[]).map((collar) => {
@@ -461,48 +461,46 @@ export default function Viewer3DScreen() {
         {/* GRADE LEGEND OVERLAY */}
         {colorMode === 'grade' && selectedGradeColumn && (
           <View style={[styles.legendOverlay, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.legendTitle, { color: colors.text }]}>Isı Haritası: {selectedGradeColumn}</Text>
+            <Text style={[styles.legendTitle, { color: colors.text }]}>Analiz: {selectedGradeColumn}</Text>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Min ({gradeRange.min.toFixed(2)})</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Min (Cut-off)</Text>
                 <TextInput
-                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
-                  placeholder={gradeRange.min.toFixed(2)}
-                  placeholderTextColor={colors.textTertiary}
-                  keyboardType="numeric"
+                  style={[styles.input, { color: colors.text, backgroundColor: colors.background }]}
                   value={customMin}
                   onChangeText={setCustomMin}
+                  placeholder={gradeRange.min.toFixed(2)}
+                  keyboardType="numeric"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Maks ({gradeRange.max.toFixed(2)})</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Maks</Text>
                 <TextInput
-                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
-                  placeholder={gradeRange.max.toFixed(2)}
-                  placeholderTextColor={colors.textTertiary}
-                  keyboardType="numeric"
+                  style={[styles.input, { color: colors.text, backgroundColor: colors.background }]}
                   value={customMax}
                   onChangeText={setCustomMax}
+                  placeholder={gradeRange.max.toFixed(2)}
+                  keyboardType="numeric"
                 />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.textSecondary, fontSize: 10, marginBottom: 4 }}>Adım</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary }}>Adım</Text>
                 <TextInput
-                  style={[styles.inputField, { color: colors.text, borderColor: colors.border }]}
-                  placeholder="0 (Oto)"
-                  placeholderTextColor={colors.textTertiary}
-                  keyboardType="numeric"
+                  style={[styles.input, { color: colors.text, backgroundColor: colors.background }]}
                   value={gradeSteps}
                   onChangeText={setGradeSteps}
+                  placeholder="Sürekli"
+                  keyboardType="numeric"
                 />
               </View>
             </View>
 
             <View style={styles.gradeBar}>
-              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(240, 100%, 50%)' }]} />
-              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(120, 100%, 50%)' }]} />
-              <View style={[styles.gradeSegment, { backgroundColor: 'hsl(0, 100%, 50%)' }]} />
+              {/* Isı haritası önizlemesi */}
+              {Array.from({ length: 10 }).map((_, i) => (
+                <View key={i} style={{ flex: 1, backgroundColor: `hsl(${(1 - i / 9) * 240}, 100%, 50%)` }} />
+              ))}
             </View>
           </View>
         )}
@@ -565,6 +563,6 @@ const styles = StyleSheet.create({
   gradeBar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', marginVertical: 8 },
   gradeSegment: { flex: 1 },
   gradeLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  inputField: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 12 }
+  input: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 12 }
 });
 

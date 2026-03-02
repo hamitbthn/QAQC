@@ -125,12 +125,13 @@ export function getGradeColor(
 
   let normalized = Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)));
 
-  // Aralık sayısı (Steps) mantığı: Değeri belirlenen basamaklara yuvarlar
+  // Adım sayısı (Steps) varsa değeri basamaklara böl
   if (steps && steps > 1) {
-    normalized = Math.round(normalized * (steps - 1)) / (steps - 1);
+    normalized = Math.floor(normalized * steps) / (steps - 1);
+    normalized = Math.max(0, Math.min(1, normalized));
   }
 
-  // Mavi (240) -> Kırmızı (0) geçişi
+  // Mavi (240) -> Kırmızı (0) HSL geçişi
   const hue = (1 - normalized) * 240;
   return `hsl(${hue}, 100%, 50%)`;
 }
@@ -267,28 +268,32 @@ export function createColoredSegmentsFromGrade(
 ): ColoredSegment[] {
   const intervals = mapAssayIntervalsToTrajectory(trajectory, assayData, holeId, gradeColumn);
 
-  return intervals.map(interval => {
-    const value = interval.gradeValue ?? 0;
-    const normalized = Math.max(0, Math.min(1, (value - minGrade) / (maxGrade - minGrade)));
-    
-    return {
-      start: {
-        x: interval.startPoint.x_local,
-        y: interval.startPoint.y_local,
-        z: interval.startPoint.z_local * verticalExaggeration,
-      },
-      end: {
-        x: interval.endPoint.x_local,
-        y: interval.endPoint.y_local,
-        z: interval.endPoint.z_local * verticalExaggeration,
-      },
-      color: getGradeColor(value, minGrade, maxGrade, steps),
-      radius: Number((1.2 * (1 + (normalized * 1.5))).toFixed(3)) || 1.2, // Yüksek tenör = Kalın boru
-      from: interval.from,
-      to: interval.to,
-      gradeValue: value,
-    };
-  });
+  return intervals
+    // KRİTİK: Belirlenen Min değerin altında kalanları sahneden siler (Cut-off)
+    .filter(interval => interval.gradeValue !== undefined && interval.gradeValue >= minGrade)
+    .map(interval => {
+      const value = interval.gradeValue ?? 0;
+      const normalized = Math.max(0, Math.min(1, (value - minGrade) / (maxGrade - minGrade)));
+
+      return {
+        start: {
+          x: interval.startPoint.x_local,
+          y: interval.startPoint.y_local,
+          z: interval.startPoint.z_local * verticalExaggeration,
+        },
+        end: {
+          x: interval.endPoint.x_local,
+          y: interval.endPoint.y_local,
+          z: interval.endPoint.z_local * verticalExaggeration,
+        },
+        color: getGradeColor(value, minGrade, maxGrade, steps),
+        // Dinamik Kalınlık: Yüksek tenörlü yerler daha kalın görünür
+        radius: Number((1.2 * (1 + (normalized * 1.5))).toFixed(3)) || 1.2,
+        from: interval.from,
+        to: interval.to,
+        gradeValue: value,
+      };
+    });
 }
 
 export function createTrajectorySegments(
