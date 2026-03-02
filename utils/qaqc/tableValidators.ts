@@ -80,8 +80,8 @@ export function validateSurveyTable(data: any[], params: QAQCParams): QAQCIssue[
 
     data.forEach((row, idx) => {
         const holeId = row.HOLEID;
-        const depth = row.DEPTH; // FIXED from row.AT
-        const azi = row.AZI;     // FIXED from row.AZIMUTH
+        const depth = row.AT !== undefined ? row.AT : row.DEPTH;
+        const azi = row.AZIMUTH !== undefined ? row.AZIMUTH : row.AZI;
         const dip = row.DIP;
 
         if (!holeId) return;
@@ -169,7 +169,7 @@ export function validateLithologyTable(data: any[], params: QAQCParams): QAQCIss
         const holeId = row.HOLEID;
         const from = row.FROM;
         const to = row.TO;
-        const lith = row.LITHCODE; // FIXED from row.LITH
+        const lith = row.LITH !== undefined ? row.LITH : row.LITHCODE;
 
         if (!holeId) return;
 
