@@ -232,6 +232,20 @@ const threeJsHTML = `
         });
 
         scene.add(drillholeGroup);
+
+        // 1. Tüm 3D hacmin gerçek sınırlarını ve merkezini hesapla
+        const box = new THREE.Box3().setFromObject(drillholeGroup);
+        const center = box.getCenter(new THREE.Vector3());
+
+        // 2. Kameranın görünmez hedefini yeraltı kütlesinin tam merkezine taşı
+        // Bu sayede her açıdan (ön, arka, alt, üst) eşit miktarda zoom yapılabilir
+        controls.target.copy(center);
+        
+        // 3. Kameranın yakını kesme mesafesini küçült (kayaların içine girebilmek için)
+        camera.near = 0.01;
+        camera.updateProjectionMatrix();
+
+        controls.update();
       } catch (err) {
         console.error("ThreeJS render error:", err);
       }
