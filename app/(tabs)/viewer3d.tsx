@@ -179,9 +179,24 @@ const threeJsHTML = `
         mouse.y = -(clientY / window.innerHeight) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
         
-        const intersects = raycaster.intersectObjects(drillholeGroup.children);
+        const intersects = raycaster.intersectObjects(drillholeGroup.children, true);
         if (intersects.length > 0) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: intersects[0].object.userData }));
+          const hit = intersects[0];
+          let clickedData = null;
+
+          // Eğer tıklanan obje bir Sürü (InstancedMesh) ise, hangi Index'e tıklandığını bul
+          if (hit.object.userData.isInstanced && hit.instanceId !== undefined) {
+             clickedData = hit.object.userData.segmentMap[hit.instanceId];
+          } else if (hit.object.userData && hit.object.userData.holeId) {
+             // Eski sistem yedek (Normal mesh veya sprite)
+             clickedData = hit.object.userData;
+          }
+
+          if (clickedData) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: clickedData }));
+          } else {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: null }));
+          }
         } else {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'SEGMENT_CLICKED', data: null }));
         }
@@ -244,7 +259,7 @@ const threeJsHTML = `
       return sprite;
     }
 
-    // Build cylinder meshes from segment data
+    // Build cylinder meshes using InstancedMesh for extreme performance
     function updateScene(segmentsData, labelPosition) {
       try {
         if (drillholeGroup) {
@@ -257,15 +272,28 @@ const threeJsHTML = `
 
         drillholeGroup = new THREE.Group();
 
-        const geomCache = new Map();
-        const matCache = new Map();
+        // 1. Toplam kuyu parçası sayısını bul
+        let totalSegments = 0;
+        segmentsData.forEach(hole => totalSegments += hole.segments.length);
 
-        // For each drillhole
+        if (totalSegments === 0) return;
+
+        // 2. TEK BİR GEOMETRİ VE MATERYAL (RAM ve GPU Tasarrufu)
+        // Silindirleri 5 kenarlı yaptık (Performans için)
+        const baseGeo = new THREE.CylinderGeometry(1, 1, 1, 5);
+        const baseMat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.15 });
+        
+        // 3. INSTANCED MESH YARATILIŞI (Tek seferde binlerce çizim)
+        const instancedMesh = new THREE.InstancedMesh(baseGeo, baseMat, totalSegments);
+        const instanceDataMap = new Array(totalSegments); // Tıklama verileri için hafıza
+
+        let i = 0;
+        const dummy = new THREE.Object3D();
+        const tColor = new THREE.Color();
+
         segmentsData.forEach(hole => {
           hole.segments.forEach(seg => {
             const thickness = (seg.radius && !isNaN(seg.radius)) ? seg.radius : 1.2;
-            
-            // Z is up in Three.js sometimes, but here we keep (X, Z, -Y) mapping
             const startV = new THREE.Vector3(seg.start.x, seg.start.z, -seg.start.y);
             const endV = new THREE.Vector3(seg.end.x, seg.end.z, -seg.end.y);
             
@@ -278,65 +306,62 @@ const threeJsHTML = `
               direction.clone().normalize()
             );
 
-            // Reuse geometry by length and thickness
-            const geomKey = len.toFixed(2) + '_' + thickness.toString();
-            let geo = geomCache.get(geomKey);
-            if (!geo) {
-              geo = new THREE.CylinderGeometry(thickness, thickness, len, 6);
-              geomCache.set(geomKey, geo);
-            }
+            // Matris ve Boyut Ayarlaması
+            dummy.position.copy(pos);
+            dummy.quaternion.copy(quat);
+            dummy.scale.set(thickness, len, thickness); // Y uzunluğu len, X ve Z kalınlık
+            dummy.updateMatrix();
 
-            // Reuse material by color
-            let mat = matCache.get(seg.color);
-            if (!mat) {
-              mat = new THREE.MeshStandardMaterial({ color: seg.color, roughness: 0.6, metalness: 0.15 });
-              matCache.set(seg.color, mat);
-            }
-
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.copy(pos);
-            mesh.quaternion.copy(quat);
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+            instancedMesh.setColorAt(i, tColor.set(seg.color));
             
-            mesh.userData = seg; // Bind the react native data to the 3D object
-            drillholeGroup.add(mesh);
+            // Veriyi bu Index'e (ID'ye) bağla
+            instanceDataMap[i] = seg;
+            i++;
           });
           
-        if (labelPosition && labelPosition !== 'none' && hole.label && hole.label.topPos && hole.label.bottomPos) {
-            const sprite = createTextSprite(hole.label.text);
-            const posData = labelPosition === 'top' ? hole.label.topPos : hole.label.bottomPos;
-            const pos = new THREE.Vector3(posData.x, posData.z, -posData.y);
-            
-            // Offset text slightly so it doesn't overlap with the cylinder
-            if (labelPosition === 'top') {
-                pos.y += 15;
-            } else {
-                pos.y -= 15;
-            }
-            
-            sprite.position.copy(pos);
-            drillholeGroup.add(sprite);
-        }
+          // İsim Etiketleri (Aynı Kalıyor)
+          if (labelPosition && labelPosition !== 'none' && hole.label && hole.label.topPos && hole.label.bottomPos) {
+              const sprite = createTextSprite(hole.label.text);
+              const posData = labelPosition === 'top' ? hole.label.topPos : hole.label.bottomPos;
+              const pos = new THREE.Vector3(posData.x, posData.z, -posData.y);
+              pos.y += (labelPosition === 'top' ? 15 : -15);
+              sprite.position.copy(pos);
+              drillholeGroup.add(sprite);
+          }
         });
 
+        // Motoru güncelle
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+        
+        // Raycaster'ın bulabilmesi için verileri kaydet
+        instancedMesh.userData.isInstanced = true;
+        instancedMesh.userData.segmentMap = instanceDataMap;
+
+        drillholeGroup.add(instancedMesh);
         scene.add(drillholeGroup);
 
-        // 1. Tüm 3D hacmin gerçek sınırlarını, merkezini ve ÇAPINI (size) hesapla
+        // Dinamik Zoom ve Merkezleme
         const box = new THREE.Box3().setFromObject(drillholeGroup);
         const center = box.getCenter(new THREE.Vector3());
         const size = box.getSize(new THREE.Vector3()).length() || 100;
 
-        // Başlangıç lokasyonlarını hafızaya al
-        initialTargetPos.copy(center);
-        initialCameraPos.set(center.x + size * 0.8, center.y + size * 0.5, center.z + size * 0.8);
-
-        controls.target.copy(initialTargetPos);
-        camera.position.copy(initialCameraPos);
+        if (typeof initialTargetPos !== 'undefined') {
+            initialTargetPos.copy(center);
+            initialCameraPos.set(center.x + size * 0.8, center.y + size * 0.5, center.z + size * 0.8);
+            controls.target.copy(initialTargetPos);
+            camera.position.copy(initialCameraPos);
+        } else {
+            controls.target.copy(center);
+            camera.position.set(center.x + size * 0.8, center.y + size * 0.5, center.z + size * 0.8);
+        }
         
         camera.near = size / 10000;
         camera.far = size * 100;
         camera.updateProjectionMatrix();
-
         controls.update();
+
       } catch (err) {
         console.error("ThreeJS render error:", err);
       }
